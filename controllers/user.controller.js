@@ -44,7 +44,8 @@ const cookieOptions = {
             password,
             avatar: {
                 public_id: email,
-                secure_url: 'https://res.cloudinary.com/dkovnuoan/image/upload/v1/avatar_img.jpg',
+                secure_url: '',
+                //https://res.cloudinary.com/dkovnuoan/image/uploads/v1/avatar_img.jpg
             },
         });
 
