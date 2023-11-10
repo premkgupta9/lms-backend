@@ -1,8 +1,7 @@
-import asyncHandler from "../middleware/asyncHandler.middleware.js";
-import User from "../models/user.model.js";
-import AppError from "../utils/AppError.js";
-import sendEmail from "../utils/sendEmail.js";
-
+import asyncHandler from '../middlewares/asyncHandler.middleware.js';
+import User from '../models/user.model.js';
+import AppError from '../utils/appError.js';
+import sendEmail from '../utils/sendEmail.js';
 
 /**
  * @CONTACT_US

@@ -1,25 +1,10 @@
-import asyncHandler from "../middleware/asyncHandler.middleware.js"
-import User from "../models/user.model.js"
-import AppError from "../utils/AppError.js"
+import crypto from 'crypto';
 
-/**
- * @GET_RAZORPAY_ID
- * @ROUTE @POST {{URL}}/api/v1/payments/razorpay-key
- * @ACCESS Public
- */
-export const getRazorpayApiKey = asyncHandler(async (req, res, next) => {
-    try {
-        res.status(200).json({
-            success: true,
-            message: 'Razorpay API key',
-            key: process.env.RAZORPAY_KEY_ID
-        })
-    } catch (e) {
-        return next(
-            new AppError(e.message, 500)
-        )
-    }
-});
+import asyncHandler from '../middlewares/asyncHandler.middleware.js';
+import User from '../models/user.model.js';
+import AppError from '../utils/appError.js';
+import { razorpay } from '../server.js';
+import Payment from '../models/Payment.model.js';
 
 /**
  * @ACTIVATE_SUBSCRIPTION
@@ -27,50 +12,40 @@ export const getRazorpayApiKey = asyncHandler(async (req, res, next) => {
  * @ACCESS Private (Logged in user only)
  */
 export const buySubscription = asyncHandler(async (req, res, next) => {
-    try {
-        // Extracting ID from request obj
-        const { id } = req.user;
+  // Extracting ID from request obj
+  const { id } = req.user;
 
-         // Finding the user based on the ID
-        const user = await User.findById(id);
+  // Finding the user based on the ID
+  const user = await User.findById(id);
 
-        if (!user) {
-            return next (
-                new AppError('Unathorized, please login', 500)
-            )
-        }
+  if (!user) {
+    return next(new AppError('Unauthorized, please login'));
+  }
 
-        // Checking the user role
-        if (user.role === 'ADMIN') {
-            return next (
-                new AppError('Admin cannot purchase a subscription', 400)
-            )
-        }
+  // Checking the user role
+  if (user.role === 'ADMIN') {
+    return next(new AppError('Admin cannot purchase a subscription', 400));
+  }
 
-        
   // Creating a subscription using razorpay that we imported from the server
-        const subscription = await razorpay.subscriptions.create({
-            plan_id: process.env.RAZORPAY_PLAN_ID, // The unique plan ID
-            customer_notify: 1, // 1 means razorpay will handle notifying the customer, 0 means we will not notify the customer
-            total_count: 12, // 12 means it will charge every month for a 1-year sub.
-        });
+  const subscription = await razorpay.subscriptions.create({
+    plan_id: process.env.RAZORPAY_PLAN_ID, // The unique plan ID
+    customer_notify: 1, // 1 means razorpay will handle notifying the customer, 0 means we will not notify the customer
+    total_count: 12, // 12 means it will charge every month for a 1-year sub.
+  });
 
-        // update user model with subscription 
-        user.subscription.id = subscription.id;
-        user.subscription.status = subscription.status;
+  // Adding the ID and the status to the user account
+  user.subscription.id = subscription.id;
+  user.subscription.status = subscription.status;
 
-        // Saving the user object
-        await user.save();
+  // Saving the user object
+  await user.save();
 
-        res.status(200).json({
-            success: true,
-            message: 'Subscribed Successfully',
-        })
-    } catch (e) {
-        return next(
-            new AppError(e.message, 500)
-        )
-    }
+  res.status(200).json({
+    success: true,
+    message: 'subscribed successfully',
+    subscription_id: subscription.id,
+  });
 });
 
 /**
@@ -79,65 +54,48 @@ export const buySubscription = asyncHandler(async (req, res, next) => {
  * @ACCESS Private (Logged in user only)
  */
 export const verifySubscription = asyncHandler(async (req, res, next) => {
-    try {
-        const { id } = req.user
+  const { id } = req.user;
+  const { razorpay_payment_id, razorpay_subscription_id, razorpay_signature } =
+    req.body;
 
-         // Finding the user
-        const user = await User.findById(id);
+  // Finding the user
+  const user = await User.findById(id);
 
-        if (!user) {
-            return next (
-                new AppError('Unathorized, please login', 500)
-            )
-        }
+  // Getting the subscription ID from the user object
+  const subscriptionId = user.subscription.id;
 
-        const {
-            razorpay_payment_id, razorpay_signature,
-            razorpay_subscription_id
-        } = req.body;
-
- // Generating a signature with SHA256 for verification purposes
+  // Generating a signature with SHA256 for verification purposes
   // Here the subscriptionId should be the one which we saved in the DB
   // razorpay_payment_id is from the frontend and there should be a '|' character between this and subscriptionId
   // At the end convert it to Hex value
-        const generatedSiganture = crypto
-        .createHmac('sha256', process.RAZORPAY_SECRET)
-        .update(`${razorpay_payment_id}|${razorpay_subscription_id}`)
-        .digest('hex');
+  const generatedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_SECRET)
+    .update(`${razorpay_payment_id}|${subscriptionId}`)
+    .digest('hex');
 
-        // Check if generated signature and signature received from the frontend is the same or not
-        if (generatedSiganture !== razorpay_signature) {
-            return next(
-                new AppError('Payment not verified, please try again', 500)
-            )
-        }
+  // Check if generated signature and signature received from the frontend is the same or not
+  if (generatedSignature !== razorpay_signature) {
+    return next(new AppError('Payment not verified, please try again.', 400));
+  }
 
-        // If they match create payment and store it in the DB
-        await Payment.create({
-            razorpay_payment_id, razorpay_signature,
-            razorpay_subscription_id
-        });
+  // If they match create payment and store it in the DB
+  await Payment.create({
+    razorpay_payment_id,
+    razorpay_subscription_id,
+    razorpay_signature,
+  });
 
-        // update user record with subscription status
+  // Update the user subscription status to active (This will be created before this)
+  user.subscription.status = 'active';
 
-         // Update the user subscription status to active (This will be created before this)
-        user.subscription.status = 'active';
+  // Save the user in the DB with any changes
+  await user.save();
 
-        // Save the user in the DB with any changes
-        await user.save();
-
-        res.status(200).json({
-            success: true,
-            message: 'Payment verified succefully!'
-        });
-
-    } catch (e) {
-        return next(
-            new AppError(e.message, 500)
-        )
-    }
+  res.status(200).json({
+    success: true,
+    message: 'Payment verified successfully',
+  });
 });
-
 
 /**
  * @CANCEL_SUBSCRIPTION
@@ -145,47 +103,38 @@ export const verifySubscription = asyncHandler(async (req, res, next) => {
  * @ACCESS Private (Logged in user only)
  */
 export const cancelSubscription = asyncHandler(async (req, res, next) => {
-    try {
-        const { id } = req.user
+  const { id } = req.user;
 
-        // Finding the user
-        const user = await User.findById(id);
+  // Finding the user
+  const user = await User.findById(id);
 
-        if (!user) {
-            return next (
-                new AppError('Unathorized, please login', 500)
-            )
-        }
+  // Checking the user role
+  if (user.role === 'ADMIN') {
+    return next(
+      new AppError('Admin does not need to cannot cancel subscription', 400)
+    );
+  }
 
-        // Checking the user role
-        if (user.role === 'ADMIN') {
-            return next(
-                new AppError(
-                    'Admin cannot cancel the subscription', 403
-                )
-            )
-        }
-        // Finding subscription ID from subscription
-        const subscriptionId = user.subscription.id;
+  // Finding subscription ID from subscription
+  const subscriptionId = user.subscription.id;
 
-        // Creating a subscription using razorpay that we imported from the server
-        const subscription = await razorpay.subscription.cancel(
-            subscriptionId  // subscription id
-        );
+  // Creating a subscription using razorpay that we imported from the server
+  try {
+    const subscription = await razorpay.subscriptions.cancel(
+      subscriptionId // subscription id
+    );
 
-        // Adding the subscription status to the user account
-        user.subscription.status = subscription.status;
+    // Adding the subscription status to the user account
+    user.subscription.status = subscription.status;
 
-        // Saving the user object
-        await user.save();
+    // Saving the user object
+    await user.save();
+  } catch (error) {
+    // Returning error if any, and this error is from razorpay so we have statusCode and message built in
+    return next(new AppError(error.error.description, error.statusCode));
+  }
 
-       
-    } catch (e) {
-        // Returning error if any, and this error is from razorpay so we have statusCode and message built in
-        return next(new AppError(error.error.description, error.statusCode));
-    }
-
-     // Finding the payment using the subscription ID
+  // Finding the payment using the subscription ID
   const payment = await Payment.findOne({
     razorpay_subscription_id: subscriptionId,
   });
@@ -226,82 +175,87 @@ export const cancelSubscription = asyncHandler(async (req, res, next) => {
 
 /**
  * @GET_RAZORPAY_ID
+ * @ROUTE @POST {{URL}}/api/v1/payments/razorpay-key
+ * @ACCESS Public
+ */
+export const getRazorpayApiKey = asyncHandler(async (_req, res, _next) => {
+  res.status(200).json({
+    success: true,
+    message: 'Razorpay API key',
+    key: process.env.RAZORPAY_KEY_ID,
+  });
+});
+
+/**
+ * @GET_RAZORPAY_ID
  * @ROUTE @GET {{URL}}/api/v1/payments
  * @ACCESS Private (ADMIN only)
  */
-export const getAllPayments = asyncHandler(async (req, res, next) => {
-    try {
-        const { count, skip } = req.query;
+export const allPayments = asyncHandler(async (req, res, _next) => {
+  const { count, skip } = req.query;
 
-        // Find all subscriptions from razorpay
-        const subscriptions = await razorpay.subscription.all({
-            count: count ? count : 10,// If count is sent then use that else default to 10
-            skip: skip ? skip : 0, // // If skip is sent then use that else default to 0
-        });
+  // Find all subscriptions from razorpay
+  const allPayments = await razorpay.subscriptions.all({
+    count: count ? count : 10, // If count is sent then use that else default to 10
+    skip: skip ? skip : 0, // // If skip is sent then use that else default to 0
+  });
 
-        const monthNames = [
-            'January',
-            'February',
-            'March',
-            'April',
-            'May',
-            'June',
-            'July',
-            'August',
-            'September',
-            'October',
-            'November',
-            'December',
-          ];
+  const monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
 
-          const finalMonths = {
-            January: 0,
-            February: 0,
-            March: 0,
-            April: 0,
-            May: 0,
-            June: 0,
-            July: 0,
-            August: 0,
-            September: 0,
-            October: 0,
-            November: 0,
-            December: 0,
-          };
+  const finalMonths = {
+    January: 0,
+    February: 0,
+    March: 0,
+    April: 0,
+    May: 0,
+    June: 0,
+    July: 0,
+    August: 0,
+    September: 0,
+    October: 0,
+    November: 0,
+    December: 0,
+  };
 
-         const monthlyWisePayments = subscriptions.items.map((payment) => {
-            // We are using payment.start_at which is in unix time, so we are converting it to Human readable format using Date()
-            const monthInNumbers = new Date(payment.start_at * 1000);
+  const monthlyWisePayments = allPayments.items.map((payment) => {
+    // We are using payment.start_at which is in unix time, so we are converting it to Human readable format using Date()
+    const monthsInNumbers = new Date(payment.start_at * 1000);
 
-            return monthNames[monthInNumbers.getMonth()];
-         });
+    return monthNames[monthsInNumbers.getMonth()];
+  });
 
-         monthlyWisePayments.map((month) => {
-            Object.keys(finalMonths).forEach((objMonth) => {
-                if (month === objMonth) {
-                    finalMonths[month] += 1;
-                }
-            });
-         });
-          
-         const monthlySalesRecord = [];
+  monthlyWisePayments.map((month) => {
+    Object.keys(finalMonths).forEach((objMonth) => {
+      if (month === objMonth) {
+        finalMonths[month] += 1;
+      }
+    });
+  });
 
-         Object.keys(finalMonths).forEach((monthName) => {
-            monthlySalesRecord.push(finalMonths[monthName]);
-         });
+  const monthlySalesRecord = [];
 
-        res.status(200).json({
-            success: true,
-            message: 'All payments',
-            subscriptions,
-            finalMonths,
-            monthlySalesRecord,
-            payments: subscriptions
-        })
-        
-    } catch (e) {
-        return next(
-            new AppError(e.message, 500)
-        )
-    }
+  Object.keys(finalMonths).forEach((monthName) => {
+    monthlySalesRecord.push(finalMonths[monthName]);
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'All payments',
+    allPayments,
+    finalMonths,
+    monthlySalesRecord,
+  });
 });

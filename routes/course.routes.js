@@ -1,26 +1,64 @@
-import { Router } from "express";
-import { addLectureToCourseById, createCourse, deleteCourse, getAllCourses, getLecturesByCourseId, removeLectureFromCourse, updateCourse } from "../controllers/course.controller.js";
-import { authorizedRoles, authorizedSubscriber, isLoggedIn } from "../middleware/auth.middleware.js";
-import upload from "../middleware/multer.middleware.js";
+import { Router } from 'express';
+import {
+  addLectureToCourseById,
+  createCourse,
+  deleteCourseById,
+  getAllCourses,
+  getLecturesByCourseId,
+  removeLectureFromCourse,
+  updateCourseById,
+} from '../controllers/course.controller.js';
+import {
+  authorizeRoles,
+  authorizeSubscribers,
+  isLoggedIn,
+} from '../middlewares/auth.middleware.js';
+import upload from '../middlewares/multer.middleware.js';
 
 const router = Router();
 
+// , isLoggedIn, authorizeRoles("ADMIN", "USER") - middlewares
+
+// OLD Code
+// router.get("/", getAllCourses);
+// router.post("/", isLoggedIn, authorizeRoles("ADMIN"), createCourse);
+// router.delete(
+//   "/",
+//   isLoggedIn,
+//   authorizeRoles("ADMIN"),
+//   removeLectureFromCourse
+// );
+// router.get("/:id", isLoggedIn, getLecturesByCourseId);
+// router.post(
+//   "/:id",
+//   isLoggedIn,
+//   authorizeRoles("ADMIN"),
+//   upload.single("lecture"),
+//   addLectureToCourseById
+// );
+// router.delete("/:id", isLoggedIn, authorizeRoles("ADMIN"), deleteCourseById);
+
+// Refactored code
 router
-.route('/')
-.get(getAllCourses)
-.post( isLoggedIn, authorizedRoles('ADMIN') , upload.single('thumbnail'),createCourse);
+  .route('/')
+  .get(getAllCourses)
+  .post(
+    isLoggedIn,
+    authorizeRoles('ADMIN'),
+    upload.single('thumbnail'),
+    createCourse
+  )
+  .delete(isLoggedIn, authorizeRoles('ADMIN'), removeLectureFromCourse);
 
 router
-.route('/:courseid')
-.get(isLoggedIn, authorizedSubscriber,getLecturesByCourseId)
-.put( isLoggedIn, authorizedRoles('ADMIN') , updateCourse)
-.delete( isLoggedIn, authorizedRoles('ADMIN') , deleteCourse, removeLectureFromCourse
-)
-// Added authorizeSubscribers to check if user is admin or subscribed if not then forbid the access to the lectures
-.post(
-    isLoggedIn, authorizedRoles('ADMIN') , upload.single('lecture'),
-    addLectureToCourseById 
-)
-;
+  .route('/:id')
+  .get(isLoggedIn, authorizeSubscribers, getLecturesByCourseId) // Added authorizeSubscribers to check if user is admin or subscribed if not then forbid the access to the lectures
+  .post(
+    isLoggedIn,
+    authorizeRoles('ADMIN'),
+    upload.single('lecture'),
+    addLectureToCourseById
+  )
+  .put(isLoggedIn, authorizeRoles('ADMIN'), updateCourseById);
 
 export default router;
