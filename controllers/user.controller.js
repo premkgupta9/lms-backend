@@ -19,32 +19,32 @@ const cookieOptions = {
  * @ROUTE @POST {{URL}}/api/v1/user/register
  * @ACCESS Public
  */
-//  Admin Registration
-export const adminRegister = asyncHandler(async (req, res) => {
-  const { fullName, email, password, role } = req.body;
+// //  Admin Registration
+// export const adminRegister = asyncHandler(async (req, res) => {
+//   const { fullName, email, password, role } = req.body;
 
-  try {
-    // Create a new admin user with the specified role
-    const admin = new User({ fullName, email, password, role });
+//   try {
+//     // Create a new admin user with the specified role
+//     const admin = new User({ fullName, email, password, role });
 
-    if (role) {
-      console.log("role", role);
-    }
+//     if (role) {
+//       console.log("role", role);
+//     }
 
-    // Save the admin user to the database
-    await admin.save();
+//     // Save the admin user to the database
+//     await admin.save();
 
-    // Respond with success message or created user details
-    res
-      .status(201)
-      .json({ message: "Admin registered successfully", user: admin });
-  } catch (error) {
-    // Handle errors during the registration process
-    res
-      .status(500)
-      .json({ message: "Failed to register admin", error: error.message });
-  }
-});
+//     // Respond with success message or created user details
+//     res
+//       .status(201)
+//       .json({ message: "Admin registered successfully", user: admin });
+//   } catch (error) {
+//     // Handle errors during the registration process
+//     res
+//       .status(500)
+//       .json({ message: "Failed to register admin", error: error.message });
+//   }
+// });
 
 export const registerUser = asyncHandler(async (req, res, next) => {
   // Destructuring the necessary data from req object

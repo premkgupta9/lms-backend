@@ -1,6 +1,5 @@
 import { Router } from "express";
 import {
-  adminRegister,
   changePassword,
   forgotPassword,
   getLoggedInUserDetails,
@@ -15,7 +14,7 @@ import upload from "../middlewares/multer.middleware.js";
 
 const router = Router();
 
-router.post("/register",  adminRegister);
+// router.post("/register",  adminRegister);
 router.post("/register", upload.single("avatar"), registerUser);
 router.post("/login", loginUser);
 router.post("/logout", logoutUser);

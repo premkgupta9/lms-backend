@@ -1,8 +1,14 @@
 import { v2 } from 'cloudinary';
 import Razorpay from 'razorpay';
-
+// import crypto from "crypto"
 import app from './app.js';
 import connectToDB from './configs/dbConnection.js';
+
+// const crypto = require('crypto');
+
+// // Generate a random JWT secret (key) with 64 characters
+// const jwtSecret = crypto.randomBytes(32).toString('base64');
+// console.log(jwtSecret);
 
 // Cloudinary configuration
 v2.config({
@@ -14,7 +20,7 @@ v2.config({
 // Razorpay configuration
 export const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_SECRET,
+  key_secret: process.env.RAZORPAY_SECRET ,
 });
 
 const PORT = process.env.PORT || 5015;
