@@ -244,6 +244,7 @@ export const forgotPassword = asyncHandler(async (req, res, next) => {
   //   "host"
   // )}/api/v1/user/reset/${resetToken}`;
   const resetPasswordUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+  console.log(resetPasswordUrl);
 
   // We here need to send an email to the user with the token
   const subject = 'Reset Password';
